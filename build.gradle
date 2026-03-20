@@ -1,0 +1,92 @@
+plugins {
+    id 'java'
+    id("xyz.jpenilla.run-paper") version "2.3.1"
+    id "com.gradleup.shadow" version "8.3.5"
+}
+
+group = 'com.eastcompany.eastsub'
+version = '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+    maven {
+        name = "papermc-repo"
+        url = "https://repo.papermc.io/repository/maven-public/"
+    }
+    // PacketEvents Repositories
+    maven { url = "https://repo.codemc.io/repository/maven-releases/" }
+    maven { url = "https://repo.codemc.io/repository/maven-snapshots/" }
+}
+
+dependencies {
+    // Paper API (1.21.1)
+    compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
+
+    // PacketEvents (API + Spigot)
+    implementation("com.github.retrooper:packetevents-api:2.11.2")
+    implementation("com.github.retrooper:packetevents-spigot:2.11.2")
+
+    // GsonなどはPaperに含まれていますが、念のためAPIが依存するものを含める
+    implementation("com.google.code.gson:gson:2.11.0")
+}
+
+// ShadowJarの設定: ここが一番重要です
+shadowJar {
+    archiveClassifier.set('') // JARの名前に "-all" をつけない
+
+    // PacketEventsのAPIと実装（io.github...）の両方をリロケートする
+    relocate 'com.github.retrooper.packetevents', 'com.eastcompany.eastsub.libs.packetevents.api'
+    relocate 'io.github.retrooper.packetevents', 'com.eastcompany.eastsub.libs.packetevents.impl'
+
+    // 不要なファイルの除外
+    exclude 'META-INF/maven/**'
+    exclude 'META-INF/proguard/**'
+}
+
+// タスクの順序制御
+// build を実行すると shadowJar が作られ、その後に copyToPlugins が走るようにする
+tasks.assemble {
+    dependsOn(shadowJar)
+}
+
+tasks.register('copyToPlugins', Copy) {
+    // shadowJar で出力されたファイル（libsディレクトリ内の最新JAR）をコピー
+    from shadowJar.archiveFile
+    into "C:/Users/tanak/Minecraft/MC_Server/plugins"
+}
+
+// buildタスクが終わったら自動的にコピーを実行
+build.finalizedBy('copyToPlugins')
+
+tasks {
+    runServer {
+        minecraftVersion("1.21.11")
+    }
+}
+
+// Javaバージョンの固定 (Java 21)
+def targetJavaVersion = 21
+java {
+    def javaVersion = JavaVersion.toVersion(targetJavaVersion)
+    sourceCompatibility = javaVersion
+    targetCompatibility = javaVersion
+    if (JavaVersion.current() < javaVersion) {
+        toolchain.languageVersion = JavaLanguageVersion.of(targetJavaVersion)
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    if (targetJavaVersion >= 10 || JavaVersion.current().isJava10Compatible()) {
+        options.release.set(targetJavaVersion)
+    }
+}
+
+processResources {
+    def props = [version: version]
+    inputs.properties props
+    filteringCharset 'UTF-8'
+    filesMatching('paper-plugin.yml') {
+        expand props
+    }
+}

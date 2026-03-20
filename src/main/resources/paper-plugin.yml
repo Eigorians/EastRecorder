@@ -1,0 +1,9 @@
+name: EastRecorder
+version: '1.0-SNAPSHOT'
+main: com.eastcompany.eastsub.eastRecorder.core.EastRecorder
+api-version: '1.21'
+dependencies:
+  server:
+    ViaVersion:
+      load: BEFORE  # ViaVersionをEastRecorderより先にロードさせる
+      required: false
