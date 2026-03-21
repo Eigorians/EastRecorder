@@ -33,12 +33,14 @@ public class RecordManager{
     private long startTime;
     private String currentFileName;
     private PacketListenerCommon packetListenerCommon = null;
-    public final Map<UUID, Location> lastLocations = new ConcurrentHashMap<>();
     public Map<Integer, UUID> getEntityIdToUuidMap() {
         return entityIdToUuidMap;
     }
     private final Map<Integer, UUID> entityIdToUuidMap = new ConcurrentHashMap<>();
+    private final List<UUID> realEntityUuidList = new ArrayList<>();
+    public List<UUID> getRealUuid(){return realEntityUuidList;}
     private final Set<Integer> playerID = ConcurrentHashMap.newKeySet();
+    RecordingSession recordingSession;
 
     public RecordManager(EastRecorder plugin) {
         this.plugin = plugin;
@@ -94,6 +96,8 @@ public class RecordManager{
             this.currentFileName = fileName;
             this.startTime = System.currentTimeMillis();
             this.recording = true;
+            recordingSession = new RecordingSession(this);
+            recordingSession.startTickLoop(plugin);
             for (org.bukkit.World world : Bukkit.getWorlds()) {
                 for (org.bukkit.entity.Entity entity : world.getEntities()) {
                     addSpawnPacket.addSpawnPacket(entity);
@@ -230,10 +234,13 @@ public class RecordManager{
 
     private void cleanup() {
         recordEvents.clearProcessedBlocks();
-        lastLocations.clear();
         entityIdToUuidMap.clear();
         playerID.clear();
         recordedFrames.clear();
+        realEntityUuidList.clear();
+        if (recordingSession != null) {
+            recordingSession = null;
+        }
 
         if (packetListenerCommon != null) {
             PacketEvents.getAPI().getEventManager().unregisterListener(packetListenerCommon);

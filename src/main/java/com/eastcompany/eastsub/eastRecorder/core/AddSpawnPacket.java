@@ -61,6 +61,7 @@ public class AddSpawnPacket {
         long elapsed = System.currentTimeMillis() - recordManager.getStartTime();
         Integer entityID = entity.getEntityId();
         recordManager.getEntityIdToUuidMap().put(entityID, newuuid);
+        recordManager.getRealUuid().add(entity.getUniqueId());
         if (entity instanceof Player player) {
             PlayerProfile bukkitProfile = player.getPlayerProfile(); // complete済みの情報を取得
             String name = bukkitProfile.getName() != null ? bukkitProfile.getName() : "ReplayNPC";

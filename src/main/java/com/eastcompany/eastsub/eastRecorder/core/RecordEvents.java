@@ -216,7 +216,7 @@ public class RecordEvents implements Listener {
                     0, SpigotConversionUtil.getEntityMetadata(player)
             );
             recordManager.saveFrame(elapsed, player.getEntityId(), PacketType.Play.Server.ENTITY_METADATA, meta);
-            recordManager.lastLocations.put(player.getUniqueId(), to.clone());
+            recordManager.recordingSession.lastLocations.put(player.getUniqueId(), to.clone());
         });
     }
 
