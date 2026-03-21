@@ -18,15 +18,14 @@ import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.entity.Entity;
-import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockPhysicsEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityChangeBlockEvent;
-import org.bukkit.event.entity.EntityDropItemEvent;
 import org.bukkit.event.entity.EntityRemoveEvent;
 import org.bukkit.event.entity.EntitySpawnEvent;
 import org.bukkit.event.player.*;
@@ -46,11 +45,9 @@ public class RecordEvents implements Listener {
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void onPlayerDropItem(EntityDropItemEvent event) {
+    public void onPlayerDropItem(PlayerDropItemEvent event) {
         if (recordManager.isNotRecording()) return;
-        if(event.getEntity() instanceof LivingEntity living) {
-            recordManager.getRecordStatus().recordEntityEquipment(living);
-        }
+        Bukkit.getScheduler().runTask(EastRecorder.getInstance(), () -> recordPlayerEquipment(event.getPlayer()));
     }
 
     @EventHandler
@@ -83,7 +80,6 @@ public class RecordEvents implements Listener {
         WrapperPlayServerDestroyEntities destroy = new WrapperPlayServerDestroyEntities(entityId);
         recordManager.saveFrame(elapsed, entityId, PacketType.Play.Server.DESTROY_ENTITIES, destroy);
         recordManager.getEntityIdToUuidMap().remove(entityId);
-        recordManager.getRecordStatus().removeCache(entityId);
     }
 
     @EventHandler
@@ -92,11 +88,11 @@ public class RecordEvents implements Listener {
         recordTeleport(event.getPlayer(), event.getRespawnLocation());
     }
 
-    @EventHandler
-    public void onTeleport(PlayerTeleportEvent event) {
-        if (recordManager.isNotRecording()) return;
-        recordTeleport(event.getPlayer(), event.getTo());
+    public void clearProcessedBlocks() {
+        this.placedbefore.clear();
     }
+
+    Set<Block> placedbefore = new HashSet<>();
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBlockPlace(BlockPlaceEvent event) {
@@ -105,11 +101,11 @@ public class RecordEvents implements Listener {
         BlockState replacedState = event.getBlockReplacedState();
         Location loc = replacedState.getLocation();
 
-        if(!recordManager.getPlacedbefore().contains(loc.getBlock())) {
+        if(!placedbefore.contains(loc.getBlock())) {
             recordManager.savePlace(0, event.getPlayer().getUniqueId(), loc, event.getBlockReplacedState().getBlockData());
         }
 
-        recordManager.getPlacedbefore().add(loc.getBlock());
+        placedbefore.add(loc.getBlock());
 
         long elapsed = System.currentTimeMillis() - recordManager.getStartTime();
         recordManager.savePlace(elapsed, event.getPlayer().getUniqueId(), loc, event.getBlockPlaced().getBlockData());
@@ -121,9 +117,9 @@ public class RecordEvents implements Listener {
         Block block = event.getBlock();
         Location loc = block.getLocation();
 
-        if (!recordManager.getPlacedbefore().contains(block)) {
+        if (!placedbefore.contains(block)) {
             recordManager.savePlace(0, event.getEntity().getUniqueId(), loc, block.getBlockData());
-            recordManager.getPlacedbefore().add(block);
+            placedbefore.add(block);
         }
 
         // 2. エンティティによる変化後（event.getBlockData()）を記録
@@ -139,15 +135,39 @@ public class RecordEvents implements Listener {
         Location loc = block.getLocation();
 
         // 1. その場所をまだ記録していなければ、0秒時点に「壊される前の状態」を保存
-        if (!recordManager.getPlacedbefore().contains(block)) {
+        if (!placedbefore.contains(block)) {
             recordManager.savePlace(0, event.getPlayer().getUniqueId(), loc, block.getBlockData());
-            recordManager.getPlacedbefore().add(block);
+            placedbefore.add(block);
         }
 
         // 2. 壊した瞬間のアクションを記録（空気にする）
         long elapsed = System.currentTimeMillis() - recordManager.getStartTime();
         recordManager.savePlace(elapsed, event.getPlayer().getUniqueId(), loc, Bukkit.createBlockData(Material.AIR));
     }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onBlockPhysics(BlockPhysicsEvent event) {
+        if (recordManager.isNotRecording()) return;
+
+        Block block = event.getBlock();
+        // 「これから変わる予定」のデータを確認
+        BlockData changedData = event.getChangedBlockData();
+
+        // もし「これから空気(AIR)になる」というデータであれば
+        if (changedData.getMaterial() == Material.AIR) {
+
+            // 1. 壊れる前の「今の状態」を初期状態として保存（未記録なら）
+            if (!placedbefore.contains(block)) {
+                recordManager.savePlace(0, 0, block.getLocation(), block.getBlockData());
+                placedbefore.add(block);
+            }
+
+            // 2. 壊れた後の状態(AIR)を現在の経過時間で記録
+            long elapsed = System.currentTimeMillis() - recordManager.getStartTime();
+            recordManager.savePlace(elapsed, 0, block.getLocation(), changedData);
+        }
+    }
+
 
     @EventHandler(priority = EventPriority.MONITOR)
         public void onPlayerChat(AsyncChatEvent event) {
@@ -217,7 +237,29 @@ public class RecordEvents implements Listener {
                     !player.isFlying()
             );
             recordManager.saveFrame(elapsed, player.getEntityId(), PacketType.Play.Server.ENTITY_TELEPORT, tp);
-            recordManager.getRecordStatus().recordEntityEquipment(player);
+            recordManager.saveFrame(elapsed, player.getEntityId(), PacketType.Play.Server.ENTITY_METADATA, meta);
+            recordManager.recordingSession.lastLocations.put(player.getUniqueId(), to.clone());
         });
     }
+
+    public void recordPlayerEquipment(Player player) {
+        if (recordManager.isNotRecording()) return;
+        long elapsedAtTrigger = System.currentTimeMillis() - recordManager.getStartTime();
+        if (recordManager.isNotRecording() || !player.isOnline()) return;
+        List<Equipment> equipmentList = new ArrayList<>();
+        org.bukkit.inventory.EntityEquipment bukkitEquip = player.getEquipment();
+
+        recordManager.addIfNotEmpty(equipmentList, EquipmentSlot.MAIN_HAND, bukkitEquip.getItemInMainHand());
+        recordManager.addIfNotEmpty(equipmentList, EquipmentSlot.OFF_HAND, bukkitEquip.getItemInOffHand());
+        recordManager.addIfNotEmpty(equipmentList, EquipmentSlot.HELMET, bukkitEquip.getHelmet());
+        recordManager.addIfNotEmpty(equipmentList, EquipmentSlot.CHEST_PLATE, bukkitEquip.getChestplate());
+        recordManager.addIfNotEmpty(equipmentList, EquipmentSlot.LEGGINGS, bukkitEquip.getLeggings());
+        recordManager.addIfNotEmpty(equipmentList, EquipmentSlot.BOOTS, bukkitEquip.getBoots());
+
+        if (!equipmentList.isEmpty()) {
+            WrapperPlayServerEntityEquipment equipPacket = new WrapperPlayServerEntityEquipment(0, equipmentList);
+            recordManager.saveFrame(elapsedAtTrigger, player.getEntityId(), PacketType.Play.Server.ENTITY_EQUIPMENT, equipPacket);
+        }
+    }
+    
 }
