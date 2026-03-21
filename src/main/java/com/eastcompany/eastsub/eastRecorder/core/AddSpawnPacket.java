@@ -16,6 +16,7 @@ import io.github.retrooper.packetevents.util.SpigotConversionUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.Item;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.EntityEquipment;
@@ -30,6 +31,7 @@ public class AddSpawnPacket {
     }
 
     void addSpawnPacket(Entity entity) {
+        if (!(entity instanceof Item)) {
         EntityType type = SpigotConversionUtil.fromBukkitEntityType(entity.getType());
         Location loc = entity.getLocation();
         UUID newuuid = UUID.randomUUID();
@@ -82,6 +84,9 @@ public class AddSpawnPacket {
                     EnumSet.of(WrapperPlayServerPlayerInfoUpdate.Action.ADD_PLAYER, WrapperPlayServerPlayerInfoUpdate.Action.UPDATE_LISTED),
                     List.of(info)));
         }
+
+
+
         // ★ ここも newuuid（名簿と同じID）を使う
         WrapperPlayServerSpawnEntity spawnPacket = new WrapperPlayServerSpawnEntity(
                 0,
@@ -97,9 +102,6 @@ public class AddSpawnPacket {
 
         recordManager.saveFrame(elapsed, entityID, PacketType.Play.Server.SPAWN_ENTITY, spawnPacket);
 
-        WrapperPlayServerEntityMetadata metaPacket = new WrapperPlayServerEntityMetadata(0, SpigotConversionUtil.getEntityMetadata(entity));
-        recordManager.saveFrame(elapsed, entityID, PacketType.Play.Server.ENTITY_METADATA, metaPacket);
-        if (entity instanceof LivingEntity living) {
             recordManager.getRecordStatus().recordEntityEquipment(living);
         }
     }

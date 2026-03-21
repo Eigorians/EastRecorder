@@ -83,6 +83,7 @@ public class ReplaySession {
             @Override
             public void run() {
                 try {
+
                     if (!viewer.isOnline() || frameIndex >= frames.size()) {
                         cleanup();
                         this.cancel();
@@ -167,7 +168,6 @@ public class ReplaySession {
                 PacketWrapper<?> wrapper = PacketRewriter.getWrapperInstance(type);
                 if (wrapper instanceof WrapperPlayServerEntityMetadata infoUpdate) {
                     decode(infoUpdate, frame.data());
-                    infoUpdate.setEntityId(npcManager.getNpcId(originalUuid));
                     npcManager.handleMetaDataUpdate(originalUuid, infoUpdate);
                     return;
                 }
@@ -177,7 +177,6 @@ public class ReplaySession {
                 PacketWrapper<?> wrapper = PacketRewriter.getWrapperInstance(type);
                 if (wrapper instanceof WrapperPlayServerEntityEquipment equipment) {
                     decode(equipment, frame.data());
-                    equipment.setEntityId(npcManager.getNpcId(originalUuid));
                     npcManager.handleEntityEquipment(originalUuid, equipment);
                     return;
                 }

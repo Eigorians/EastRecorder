@@ -217,9 +217,6 @@ public class RecordEvents implements Listener {
                     !player.isFlying()
             );
             recordManager.saveFrame(elapsed, player.getEntityId(), PacketType.Play.Server.ENTITY_TELEPORT, tp);
-            WrapperPlayServerEntityMetadata meta = new WrapperPlayServerEntityMetadata(
-                    0, SpigotConversionUtil.getEntityMetadata(player)
-            );
             recordManager.getRecordStatus().recordEntityEquipment(player);
         });
     }

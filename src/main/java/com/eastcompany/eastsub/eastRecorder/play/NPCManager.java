@@ -6,7 +6,7 @@ import com.github.retrooper.packetevents.util.FakeChannelUtil;
 import com.github.retrooper.packetevents.util.Vector3d;
 import com.github.retrooper.packetevents.wrapper.play.server.*;
 import org.bukkit.Bukkit;
-import org.bukkit.entity.Player;
+import org.bukkit.entity.*;
 
 import java.util.*;
 
@@ -26,6 +26,7 @@ public class NPCManager {
     public void handleMetaDataUpdate(UUID originalUuid, WrapperPlayServerEntityMetadata packet) {
         NPCState state = npcStates.get(originalUuid);
         if (state != null) {
+            packet.setEntityId(getNpcId(originalUuid));
             state.updateMetadata(packet);
             packet.resetBuffer();
             broadcast(packet);
@@ -35,6 +36,7 @@ public class NPCManager {
     public void handleEntityEquipment(UUID originalUuid, WrapperPlayServerEntityEquipment packet) {
         NPCState state = npcStates.get(originalUuid);
         if (state != null) {
+            packet.setEntityId(getNpcId(originalUuid));
             state.updateEquipment(packet);
             packet.resetBuffer();
             broadcast(packet);
@@ -45,23 +47,26 @@ public class NPCManager {
         int npcId = 100000 + new Random().nextInt(10000);
         NPCState state = new NPCState(npcId, originalUuid);
 
-        // スキンのセットアップ
-        if (spawn.getEntityType().equals(EntityTypes.PLAYER)) {
-            var profile = pendingProfiles.get(originalUuid);
-            if (profile != null) {
-                state.setProfile(profile);
-                spawn.setUUID(Optional.of(profile.getUUID()));
-            } else {
-                spawn.setUUID(Optional.of(UUID.randomUUID()));
+        if (!(spawn.getEntityType() instanceof Item)) {
+
+            // スキンのセットアップ
+            if (spawn.getEntityType().equals(EntityTypes.PLAYER)) {
+                var profile = pendingProfiles.get(originalUuid);
+                if (profile != null) {
+                    state.setProfile(profile);
+                    spawn.setUUID(Optional.of(profile.getUUID()));
+                } else {
+                    spawn.setUUID(Optional.of(UUID.randomUUID()));
+                }
             }
-        }
 
-        state.updateSpawn(spawn);
-        npcStates.put(originalUuid, state);
+            state.updateSpawn(spawn);
+            npcStates.put(originalUuid, state);
 
-        // 全員に現在の状態を適用
-        for (Player p : Bukkit.getOnlinePlayers()) {
-            state.apply(p);
+            // 全員に現在の状態を適用
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                state.apply(p);
+            }
         }
     }
 

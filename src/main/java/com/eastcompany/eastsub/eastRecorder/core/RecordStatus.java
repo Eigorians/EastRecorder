@@ -102,10 +102,6 @@ public class RecordStatus {
         }
     }
 
-    public void updateMetaCache(int entityId, List<EntityData<?>> metaList) {
-        lastMeta.put(entityId, new ArrayList<>(metaList));
-    }
-
     public void removeCache(int entityId) {
         lastEquipmentMap.remove(entityId);
         lastMeta.remove(entityId);
