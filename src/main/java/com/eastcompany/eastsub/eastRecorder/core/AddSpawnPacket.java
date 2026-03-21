@@ -102,6 +102,7 @@ public class AddSpawnPacket {
 
         recordManager.saveFrame(elapsed, entityID, PacketType.Play.Server.SPAWN_ENTITY, spawnPacket);
 
+        if(entity instanceof  LivingEntity living)
             recordManager.getRecordStatus().recordEntityEquipment(living);
         }
     }

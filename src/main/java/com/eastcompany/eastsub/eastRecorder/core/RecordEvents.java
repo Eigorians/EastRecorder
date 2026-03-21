@@ -32,10 +32,7 @@ import org.bukkit.event.player.*;
 import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.Team;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 public class RecordEvents implements Listener {
     private final RecordManager recordManager;
@@ -158,13 +155,13 @@ public class RecordEvents implements Listener {
 
             // 1. 壊れる前の「今の状態」を初期状態として保存（未記録なら）
             if (!placedbefore.contains(block)) {
-                recordManager.savePlace(0, 0, block.getLocation(), block.getBlockData());
+                recordManager.savePlace(0, UUID.randomUUID(), block.getLocation(), block.getBlockData());
                 placedbefore.add(block);
             }
 
             // 2. 壊れた後の状態(AIR)を現在の経過時間で記録
             long elapsed = System.currentTimeMillis() - recordManager.getStartTime();
-            recordManager.savePlace(elapsed, 0, block.getLocation(), changedData);
+            recordManager.savePlace(elapsed, UUID.randomUUID(), block.getLocation(), changedData);
         }
     }
 
@@ -237,7 +234,6 @@ public class RecordEvents implements Listener {
                     !player.isFlying()
             );
             recordManager.saveFrame(elapsed, player.getEntityId(), PacketType.Play.Server.ENTITY_TELEPORT, tp);
-            recordManager.saveFrame(elapsed, player.getEntityId(), PacketType.Play.Server.ENTITY_METADATA, meta);
             recordManager.recordingSession.lastLocations.put(player.getUniqueId(), to.clone());
         });
     }
