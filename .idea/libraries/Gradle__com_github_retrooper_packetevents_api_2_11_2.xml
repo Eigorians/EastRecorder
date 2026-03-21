@@ -1,0 +1,10 @@
+<component name="libraryTable">
+  <library name="Gradle: com.github.retrooper:packetevents-api:2.11.2" type="java-imported" external-system-id="GRADLE">
+    <properties groupId="com.github.retrooper" artifactId="packetevents-api" version="2.11.2" baseVersion="2.11.2" />
+    <CLASSES>
+      <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/com.github.retrooper/packetevents-api/2.11.2/acb60a83fa6eb26746fabc7efe58fcfafe27eec5/packetevents-api-2.11.2.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

@@ -100,20 +100,7 @@ public class AddSpawnPacket {
         WrapperPlayServerEntityMetadata metaPacket = new WrapperPlayServerEntityMetadata(0, SpigotConversionUtil.getEntityMetadata(entity));
         recordManager.saveFrame(elapsed, entityID, PacketType.Play.Server.ENTITY_METADATA, metaPacket);
         if (entity instanceof LivingEntity living) {
-            EntityEquipment bukkitEquip = living.getEquipment();
-            if (bukkitEquip != null) {
-                List<Equipment> equipmentList = new ArrayList<Equipment>();
-                recordManager.addIfNotEmpty(equipmentList, EquipmentSlot.MAIN_HAND, bukkitEquip.getItemInMainHand());
-                recordManager.addIfNotEmpty(equipmentList, EquipmentSlot.OFF_HAND, bukkitEquip.getItemInOffHand());
-                recordManager.addIfNotEmpty(equipmentList, EquipmentSlot.HELMET, bukkitEquip.getHelmet());
-                recordManager.addIfNotEmpty(equipmentList, EquipmentSlot.CHEST_PLATE, bukkitEquip.getChestplate());
-                recordManager.addIfNotEmpty(equipmentList, EquipmentSlot.LEGGINGS, bukkitEquip.getLeggings());
-                recordManager.addIfNotEmpty(equipmentList, EquipmentSlot.BOOTS, bukkitEquip.getBoots());
-                if (!equipmentList.isEmpty()) {
-                    WrapperPlayServerEntityEquipment equipmentPacket = new WrapperPlayServerEntityEquipment(0, equipmentList);
-                    recordManager.saveFrame(elapsed, entityID, PacketType.Play.Server.ENTITY_EQUIPMENT, equipmentPacket);
-                }
-            }
+            recordManager.getRecordStatus().recordEntityEquipment(living);
         }
     }
 }

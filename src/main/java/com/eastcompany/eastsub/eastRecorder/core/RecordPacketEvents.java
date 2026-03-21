@@ -13,6 +13,8 @@ import com.github.retrooper.packetevents.wrapper.play.server.*;
 import io.github.retrooper.packetevents.util.SpigotConversionUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.World;
+import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 
 import java.util.UUID;
@@ -32,7 +34,7 @@ public class RecordPacketEvents implements PacketListener {
         Player player = event.getPlayer();
         if (player == null) return;
         var type = event.getPacketType();
-        if(type == PacketType.Play.Client.CLIENT_TICK_END) {
+        if(type == PacketType.Play.Client.CLIENT_TICK_END || type == PacketType.Play.Client.PLAYER_POSITION || type == PacketType.Play.Client.KEEP_ALIVE) {
             return;
         }
         long elapsed = System.currentTimeMillis() - recordManager.getStartTime();
@@ -44,12 +46,18 @@ public class RecordPacketEvents implements PacketListener {
                     meta);
             return;
         }
+
+        if (type.getName().contains("ITEM") || type.getName().contains("INVENTORY") || type.getName().contains("CLICK")){
+            recordManager.getRecordStatus().recordEntityEquipment(player);
+            return;
+        }
         if(type == PacketType.Play.Client.PLAYER_INPUT){
             WrapperPlayServerEntityMetadata meta = new WrapperPlayServerEntityMetadata(
                     0, SpigotConversionUtil.getEntityMetadata(player)
             );
             recordManager.saveFrame(elapsed, player.getEntityId(), PacketType.Play.Server.ENTITY_METADATA,
                     meta);
+            recordManager.getRecordStatus().recordEntityEquipment(player);
             return;
         }
         if (type == PacketType.Play.Client.ANIMATION){
@@ -74,7 +82,10 @@ public class RecordPacketEvents implements PacketListener {
 
         PacketContext context = resolvePacketContext(event.clone());
 
-        if (context == null || context.entityId() == -1) return;
+        if (context == null)return;;
+
+
+        if (context.entityId() == -1) return;
 
         if (recordManager.getEntityIdToUuidMap().get(context.entityId()) == null) return;
 
@@ -89,6 +100,8 @@ public class RecordPacketEvents implements PacketListener {
 
     private PacketContext resolvePacketContext(PacketSendEvent clonedEvent) {
         var type = clonedEvent.getPacketType();
+
+        long elapsed = System.currentTimeMillis() - recordManager.getStartTime();
 
         try {
             // 全てのケースで: 1. ラッパー生成 -> 2. read() で解析 -> 3. ID取得
@@ -106,6 +119,7 @@ public class RecordPacketEvents implements PacketListener {
                 case PacketType.Play.Server.ENTITY_EQUIPMENT -> {
                     var wr = new WrapperPlayServerEntityEquipment(clonedEvent);
                     wr.read();
+                    recordManager.getRecordStatus().updateCacheFromPacket(wr.getEntityId(), wr.getEquipment());
                     yield new PacketContext(wr, wr.getEntityId());
                 }
                 case PacketType.Play.Server.DAMAGE_EVENT -> {
@@ -118,11 +132,11 @@ public class RecordPacketEvents implements PacketListener {
                     wr.read();
                     yield new PacketContext(wr, wr.getEntityId());
                 }
+
                 default -> null;
             };
         } catch (Exception e) {
             return null;
         }
     }
-
 }

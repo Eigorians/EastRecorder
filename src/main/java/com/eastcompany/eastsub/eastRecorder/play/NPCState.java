@@ -10,6 +10,7 @@ import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerEn
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerPlayerInfoUpdate;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSpawnEntity;
 import net.kyori.adventure.text.Component;
+import org.bukkit.Location;
 import org.bukkit.entity.Player;
 
 import java.util.EnumSet;
@@ -78,6 +79,11 @@ public class NPCState {
 
         // 4. 装備品
         if (equipmentPacket != null) send(viewer, equipmentPacket);
+    }
+
+    public void setRotation(float yaw , float pitch){
+        spawnPacket.setYaw(yaw);
+        spawnPacket.setPitch(pitch);
     }
 
     private void send(Player p, PacketWrapper<?> w) {

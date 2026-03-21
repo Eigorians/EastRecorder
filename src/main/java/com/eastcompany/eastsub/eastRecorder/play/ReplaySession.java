@@ -10,15 +10,11 @@ import com.github.retrooper.packetevents.wrapper.PacketWrapper;
 import com.github.retrooper.packetevents.wrapper.play.server.*;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import org.bukkit.World;
-import org.bukkit.block.data.BlockData;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 
-import java.io.ByteArrayInputStream;
-import java.io.DataInputStream;
-import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -31,6 +27,9 @@ public class ReplaySession {
     private double playbackSpeed = 1;
     private long playbackStartTime;
     private final ReplayBlockHandler blockHandler;
+    private final java.util.Map<UUID, Location> lastReplayLocations = new java.util.HashMap<>();
+    private final ReplayMergeBuffer replayMergeBuffer;
+
 
     public ReplaySession(double speed, List<ReplayFrame> frames, Player viewer, EastRecorder plugin) {
         this.frames = frames;
@@ -39,6 +38,7 @@ public class ReplaySession {
         this.npcManager = new NPCManager();
         blockHandler = new ReplayBlockHandler();
         this.playbackSpeed = speed;
+        this.replayMergeBuffer = new ReplayMergeBuffer();
         Bukkit.getLogger().info("size " + frames.size() + " ---");
     }
 
@@ -92,15 +92,46 @@ public class ReplaySession {
                     long realElapsed = System.currentTimeMillis() - playbackStartTime;
                     long virtualElapsed = (long) (realElapsed * playbackSpeed);
 
+                    // --- 1. このTickで処理すべきフレームを抽出 ---
+                    // LinkedHashMap で時系列を維持しつつ重複排除
+                    java.util.Map<String, ReplayFrame> frameMap = new java.util.LinkedHashMap<>();
+
                     while (frameIndex < frames.size() && frames.get(frameIndex).timestamp() <= virtualElapsed) {
-                        processAndSendPacket(frames.get(frameIndex));
+                        ReplayFrame frame = frames.get(frameIndex);
+                        PacketType.Play.Server type = frame.packetType();
+
+                        String key;
+                        // 除外リスト：これらは重複排除せず、すべて処理する
+                        if (type == PacketType.Play.Server.BLOCK_CHANGE ||
+                                type == PacketType.Play.Server.SYSTEM_CHAT_MESSAGE) {
+
+                            // 常にユニークなキーにすることで、Mapの上書きを防ぐ
+                            key = java.util.UUID.randomUUID().toString();
+                        } else {
+                            // 同一エンティティ かつ 同一パケットタイプなら上書き
+                            key = frame.targetUuid().toString() + "-" + type.getName();
+                        }
+
+                        frameMap.put(key, frame);
                         frameIndex++;
                     }
+
+                    // --- 2. 抽出されたフレームを一括処理 ---
+                    if (!frameMap.isEmpty()) {
+                        processFrameBatch(new java.util.ArrayList<>(frameMap.values()));
+                    }
+
                 } catch (Exception e) {
                     handleCriticalError("リプレイ・メインループ内でエラーが発生しました", e);
                 }
             }
         }.runTaskTimer(plugin, 0L, 1L);
+    }
+
+    private void processFrameBatch(List<ReplayFrame> batch) {
+        for (ReplayFrame frame : batch) {
+            processAndSendPacket(frame);
+        }
     }
 
     private void processAndSendPacket(ReplayFrame frame) {
@@ -169,9 +200,10 @@ public class ReplaySession {
 
             if (rewrittenWrapper != null) {
                 if (rewrittenWrapper instanceof WrapperPlayServerEntityTeleport tp) {
-                    WrapperPlayServerDestroyEntities destroy = new WrapperPlayServerDestroyEntities(currentNpcId);
-                    broadcastPacket(destroy);
-                    npcManager.respawnAt(currentNpcId, tp.getPosition(), tp.getPosition(), tp.getYaw(), tp.getPitch());
+
+                    PacketWrapper<?> out = getOptimizedMovePacket(originalUuid,npcManager.getNpcId(originalUuid),tp);
+
+                    broadcastPacket(out);
                     return;
                 }
 
@@ -243,6 +275,7 @@ public class ReplaySession {
         try {
             blockHandler.restoreAll();
             npcManager.cleanup();
+            lastReplayLocations.clear();
         } catch (Exception e) {
             plugin.getLogger().severe("クリーンアップ中にエラーが発生しました: " + e.getMessage());
         }
@@ -258,4 +291,43 @@ public class ReplaySession {
         stop();
     }
 
+    private PacketWrapper<?> getOptimizedMovePacket(UUID uuid, int npcId, WrapperPlayServerEntityTeleport tp) {
+        Location currentLoc = new Location(viewer.getWorld(), tp.getPosition().x, tp.getPosition().y, tp.getPosition().z, tp.getYaw(), tp.getPitch());
+        Location lastLoc = lastReplayLocations.get(uuid);
+
+        if(lastLoc == null){
+            lastReplayLocations.put(uuid,currentLoc);
+            return tp;
+        }
+
+        PacketWrapper<?> resultPacket;
+
+        if (lastLoc.getWorld().equals(currentLoc.getWorld())) {
+            double dx = currentLoc.getX() - lastLoc.getX();
+            double dy = currentLoc.getY() - lastLoc.getY();
+            double dz = currentLoc.getZ() - lastLoc.getZ();
+
+            double distanceSq = dx * dx + dy * dy + dz * dz;
+
+            // 8ブロック以内、かつ移動がある場合は RelativeMoveAndRotation
+            // 8ブロック以上、または全く動いていない場合は Teleport (同期ズレ防止)
+            if (distanceSq > 0.0001 && distanceSq < 64.0) {
+                resultPacket = new WrapperPlayServerEntityRelativeMoveAndRotation(
+                        npcId, dx, dy, dz, currentLoc.getYaw(), currentLoc.getPitch(), tp.isOnGround()
+                );
+            } else {
+                npcManager.respawnAt(npcId,tp.getPosition(),tp.getYaw(),tp.getPitch());
+                tp.setEntityId(npcManager.getNpcId(uuid));
+                resultPacket = tp;
+            }
+        } else {
+            // 初回、またはワールドが違う場合は強制的に Teleport
+            tp.setEntityId(npcId);
+            resultPacket = tp;
+        }
+
+        // 次回比較用に今回の位置を保存
+        lastReplayLocations.put(uuid, currentLoc.clone());
+        return resultPacket;
+    }
 }

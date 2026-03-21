@@ -2,6 +2,7 @@ package com.eastcompany.eastsub.eastRecorder.play;
 
 import com.github.retrooper.packetevents.PacketEvents;
 import com.github.retrooper.packetevents.protocol.entity.type.EntityTypes;
+import com.github.retrooper.packetevents.util.FakeChannelUtil;
 import com.github.retrooper.packetevents.util.Vector3d;
 import com.github.retrooper.packetevents.wrapper.play.server.*;
 import org.bukkit.Bukkit;
@@ -64,12 +65,14 @@ public class NPCManager {
         }
     }
 
-    public void respawnAt(int npcId, Vector3d vector3d, Vector3d pos, float yaw, float pitch) {
+    public void respawnAt(int npcId, Vector3d vector3d,float yaw, float pitch) {
         NPCState state = findByNpcId(npcId);
         if (state == null) return;
         state.setLocation(vector3d);
         // 再生成用の位置更新（内部のSpawnパケットを書き換え）
         // ※実際には新しい座標でapplyし直す
+
+        state.setRotation(yaw,pitch);
         for (Player p : Bukkit.getOnlinePlayers()) {
             PacketEvents.getAPI().getPlayerManager().sendPacket(p, new WrapperPlayServerDestroyEntities(npcId));
 

@@ -60,40 +60,27 @@ public class RecordingSession {
     }
 
     private void processMovement(long elapsed, Entity entity, Location cur, Location last) {
-        // 1. 座標の差分計算
-        double dx = cur.getX() - last.getX();
-        double dy = cur.getY() - last.getY();
-        double dz = cur.getZ() - last.getZ();
         float yaw = cur.getYaw();
         float pitch = cur.getPitch();
 
-        double distanceSq = dx * dx + dy * dy + dz * dz;
-        boolean moved = distanceSq > 0.0001; // 微小な移動を検知
+        // 1. 移動または回転があったか判定
+        boolean moved = cur.getX() != last.getX() || cur.getY() != last.getY() || cur.getZ() != last.getZ();
         boolean rotated = (Math.abs(yaw - last.getYaw()) > 0.01) || (Math.abs(pitch - last.getPitch()) > 0.01);
         boolean isOnGround = entity.isOnGround();
 
-        // 2. 適切なパケットの選択
-        if (distanceSq > 64.0 || !cur.getWorld().equals(last.getWorld())) {
-            // 8ブロック以上の移動、またはワールド移動は「テレポート」
-            var tp = new WrapperPlayServerEntityTeleport(0, SpigotConversionUtil.fromBukkitLocation(cur), isOnGround);
+        // 2. 移動または回転があれば、すべて Teleport パケットとして処理
+        if (moved || rotated) {
+            // EntityTeleport は絶対座標を指定するため、RelativeMove のような距離制限がありません
+            var tp = new WrapperPlayServerEntityTeleport(
+                    entity.getEntityId(),
+                    SpigotConversionUtil.fromBukkitLocation(cur),
+                    isOnGround
+            );
             recordManager.saveFrame(elapsed, entity.getEntityId(), PacketType.Play.Server.ENTITY_TELEPORT, tp);
-        }
-        else if (moved && rotated) {
-            var moveRot = new WrapperPlayServerEntityRelativeMoveAndRotation(0, dx, dy, dz, yaw, pitch, isOnGround);
-            recordManager.saveFrame(elapsed, entity.getEntityId(), PacketType.Play.Server.ENTITY_RELATIVE_MOVE_AND_ROTATION, moveRot);
-        }
-        else if (moved) {
-            var move = new WrapperPlayServerEntityRelativeMove(0, dx, dy, dz, isOnGround);
-            recordManager.saveFrame(elapsed, entity.getEntityId(), PacketType.Play.Server.ENTITY_RELATIVE_MOVE, move);
-        }
-        else if (rotated) {
-            var rot = new WrapperPlayServerEntityRotation(0, yaw, pitch, isOnGround);
-            recordManager.saveFrame(elapsed, entity.getEntityId(), PacketType.Play.Server.ENTITY_ROTATION, rot);
-        }
 
-        // 3. 首の向きは独立して保存（これがないと首が回らない）
-        if (rotated) {
-            var headLook = new WrapperPlayServerEntityHeadLook(0, yaw);
+            // 3. 首の向き (Head Rotation) も同時に保存
+            // テレポートパケットだけでは首の向き（Yaw）が同期されない場合があるため必須です
+            var headLook = new WrapperPlayServerEntityHeadLook(entity.getEntityId(), yaw);
             recordManager.saveFrame(elapsed, entity.getEntityId(), PacketType.Play.Server.ENTITY_HEAD_LOOK, headLook);
         }
     }

@@ -32,6 +32,9 @@ public class RecordManager{
     private final AddSpawnPacket addSpawnPacket = new AddSpawnPacket(this);
     private long startTime;
     private String currentFileName;
+    public RecordStatus getRecordStatus() {return recordStatus;}
+
+    private RecordStatus recordStatus;
     private PacketListenerCommon packetListenerCommon = null;
     public Map<Integer, UUID> getEntityIdToUuidMap() {
         return entityIdToUuidMap;
@@ -40,6 +43,11 @@ public class RecordManager{
     private final List<UUID> realEntityUuidList = new ArrayList<>();
     public List<UUID> getRealUuid(){return realEntityUuidList;}
     private final Set<Integer> playerID = ConcurrentHashMap.newKeySet();
+    public Set<Block> getPlacedbefore() {
+        return placedbefore;
+    }
+
+    private final Set<Block> placedbefore = new HashSet<>();
     RecordingSession recordingSession;
 
     public RecordManager(EastRecorder plugin) {
@@ -92,7 +100,9 @@ public class RecordManager{
     public void startRecording(String fileName) {
         if (recording) return;
 
+
         try {
+            this.recordStatus = new RecordStatus(this , plugin);;
             this.currentFileName = fileName;
             this.startTime = System.currentTimeMillis();
             this.recording = true;
@@ -233,11 +243,11 @@ public class RecordManager{
     }
 
     private void cleanup() {
-        recordEvents.clearProcessedBlocks();
         entityIdToUuidMap.clear();
         playerID.clear();
         recordedFrames.clear();
         realEntityUuidList.clear();
+        placedbefore.clear();
         if (recordingSession != null) {
             recordingSession = null;
         }
@@ -245,6 +255,10 @@ public class RecordManager{
         if (packetListenerCommon != null) {
             PacketEvents.getAPI().getEventManager().unregisterListener(packetListenerCommon);
             packetListenerCommon = null;
+        }
+
+        if (this.recordStatus != null) {
+            recordStatus = null;
         }
 
         org.bukkit.event.HandlerList.unregisterAll(recordEvents);
