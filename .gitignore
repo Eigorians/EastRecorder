@@ -1,5 +1,18 @@
-# プロジェクトの除外パス
-/.gradle/
-/build/
-/build/classes/java/main/
-/.idea/
+# Gradle のビルド成果物
+.gradle/
+build/
+
+# IntelliJ の設定 (個人環境依存)
+.idea/
+*.iml
+out/
+
+# Eclipse / STS の設定 (個人環境依存)
+.settings/
+.project
+.classpath
+bin/
+
+# OS固有のキャッシュファイル (Mac/Windows)
+.DS_Store
+Thumbs.db
